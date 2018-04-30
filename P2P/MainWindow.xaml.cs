@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Net.PeerToPeer;
+using System.Security.Cryptography;
 using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,18 +26,30 @@ namespace P2P
     public partial class MainWindow : Window
     {
         private P2PService localService;
-        private string serviceUrl;
+        //private string serviceUrl;
         private ServiceHost host;
         private PeerName peerName;
         private PeerNameRegistration peerNameRegistration;
+        private RSAParameters privateKey;
+        private RSAParameters publicKey;
+        private UnicodeEncoding byteConverter;
+        private RSACryptoServiceProvider RSA;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            RSA = new RSACryptoServiceProvider();
+            byteConverter = new UnicodeEncoding();
+
+            privateKey = RSA.ExportParameters(true);
+            publicKey = RSA.ExportParameters(false);
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+
+
             // Получение конфигурационной информации из app.config
             string port = ConfigurationManager.AppSettings["port"];
             string username = ConfigurationManager.AppSettings["username"];
@@ -67,7 +80,7 @@ namespace P2P
             }
 
             // Регистрация и запуск службы WCF
-            localService = new P2PService(this, username);
+            localService = new P2PService(this, username, publicKey);
             host = new ServiceHost(localService, new Uri(serviceUrl));
             NetTcpBinding binding = new NetTcpBinding();
             binding.Security.Mode = SecurityMode.None;
@@ -93,6 +106,7 @@ namespace P2P
 
             // Запуск процесса регистрации
             peerNameRegistration.Start();
+     
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -119,13 +133,18 @@ namespace P2P
 
             // Преобразование незащищенных имен пиров асинхронным образом
             resolver.ResolveAsync(new PeerName("0.P2P Sample"), 1);
+
         }
 
         void resolver_ResolveCompleted(object sender, ResolveCompletedEventArgs e)
         {
+            if (PeerList.Items.Count > 0) showrsa.IsEnabled = true;
+            
             // Сообщение об ошибке, если в облаке не найдены пиры
             if (PeerList.Items.Count == 0)
             {
+                showrsa.IsEnabled = false;
+
                 PeerList.Items.Add(
                    new PeerEntry
                    {
@@ -135,6 +154,7 @@ namespace P2P
             }
             // Повторно включаем кнопку "обновить"
             RefreshButton.IsEnabled = true;
+
         }
 
         void resolver_ResolveProgressChanged(object sender, ResolveProgressChangedEventArgs e)
@@ -157,6 +177,7 @@ namespace P2P
                            {
                                PeerName = peer.PeerName,
                                ServiceProxy = serviceProxy,
+                               PublicKey = serviceProxy.GetKey(),
                                DisplayString = serviceProxy.GetName(),
                                ButtonsEnabled = true
                            });
@@ -186,21 +207,72 @@ namespace P2P
                 {
                     try
                     {
-                        peerEntry.ServiceProxy.SendMessage("Привет друг!", ConfigurationManager.AppSettings["username"]);
+                        string orgMess = message.Text;
+                        if (orgMess == "") return;
+
+                        message.Clear();
+                        byte[] encBytes = RSAEncrypt(byteConverter.GetBytes(orgMess), peerEntry.PublicKey, false);
+                        if (showrsa.IsChecked == true)
+                        {
+                            MessageBox.Show(byteConverter.GetString(encBytes));
+                        }
+                        peerEntry.ServiceProxy.SendMessage(encBytes, ConfigurationManager.AppSettings["username"]);
+                        chat.Content += "\nЯ: " + orgMess + " " + DateTime.Now;
+                        clearbutt.IsEnabled = true;
                     }
                     catch (CommunicationException)
                     {
-
+                        
                     }
                 }
             }
         }
 
-        internal void DisplayMessage(string message, string from)
+        internal void DisplayMessage(byte[] message, string from)
         {
             // Показать полученное сообщение (вызывается из службы WCF)
-            MessageBox.Show(this, message, string.Format("Сообщение от {0}", from),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            //MessageBox.Show(this, message, string.Format("Сообщение от {0}", from),
+            //    MessageBoxButton.OK, MessageBoxImage.Information);
+            byte[] decBytes = RSADecrypt(message, privateKey, false);
+            string decmess = byteConverter.GetString(decBytes);
+            chat.Content += "\n" + from + ": " + decmess + " " + DateTime.Now;
+            clearbutt.IsEnabled = true;
+        }
+
+        static public byte[] RSAEncrypt(byte[] DataToEncrypt, RSAParameters RSAKeyInfo, bool DoOAEPPadding)
+        {
+            //Create a new instance of RSACryptoServiceProvider.
+            RSACryptoServiceProvider RSA = new RSACryptoServiceProvider();
+
+            //Import the RSA Key information. This only needs
+            //toinclude the public key information.
+            RSA.ImportParameters(RSAKeyInfo);
+
+            //Encrypt the passed byte array and specify OAEP padding.  
+            //OAEP padding is only available on Microsoft Windows XP or
+            //later.  
+            return RSA.Encrypt(DataToEncrypt, DoOAEPPadding);
+        }
+
+        static public byte[] RSADecrypt(byte[] DataToDecrypt, RSAParameters RSAKeyInfo, bool DoOAEPPadding)
+        {
+            //Create a new instance of RSACryptoServiceProvider.
+            RSACryptoServiceProvider RSA = new RSACryptoServiceProvider();
+
+            //Import the RSA Key information. This needs
+            //to include the private key information.
+            RSA.ImportParameters(RSAKeyInfo);
+
+            //Decrypt the passed byte array and specify OAEP padding.  
+            //OAEP padding is only available on Microsoft Windows XP or
+            //later.  
+            return RSA.Decrypt(DataToDecrypt, DoOAEPPadding);
+        }
+
+        private void clearbutt_Click(object sender, RoutedEventArgs e)
+        {
+            chat.Content = "Переписка: ";
+            clearbutt.IsEnabled = false;
         }
     }
 }

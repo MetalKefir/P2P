@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.Serialization;
 using System.ServiceModel;
+using System.Security.Cryptography;
 
 namespace P2P
 {
@@ -13,11 +14,13 @@ namespace P2P
     {
         private MainWindow hostReference;
         private string username;
+        private RSAParameters publicKey;
 
-        public P2PService(MainWindow hostReference, string username)
+        public P2PService(MainWindow hostReference, string username, RSAParameters pKey)
         {
             this.hostReference = hostReference;
             this.username = username;
+            this.publicKey = pKey;
         }
 
         public string GetName()
@@ -25,7 +28,12 @@ namespace P2P
             return username;
         }
 
-        public void SendMessage(string message, string from)
+        public RSAParameters GetKey()
+        {
+            return publicKey;
+        }
+
+        public void SendMessage(byte[] message, string from)
         {
             hostReference.DisplayMessage(message, from);
         }

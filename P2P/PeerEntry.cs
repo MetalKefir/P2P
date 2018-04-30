@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Net.PeerToPeer;
+using System.Security.Cryptography;
 
 namespace P2P
 {
@@ -13,5 +14,6 @@ namespace P2P
         public IP2PService ServiceProxy { get; set; }
         public string DisplayString { get; set; }
         public bool ButtonsEnabled { get; set; }
+        public RSAParameters PublicKey {get; set;}
     }
 }

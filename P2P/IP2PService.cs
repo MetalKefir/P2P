@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Runtime.Serialization;
 using System.ServiceModel;
+using System.Security.Cryptography;
 
 namespace P2P
 {
@@ -13,7 +14,10 @@ namespace P2P
         [OperationContract]
         string GetName();
 
+        [OperationContract]
+        RSAParameters GetKey();
+
         [OperationContract(IsOneWay = true)]
-        void SendMessage(string message, string from);
+        void SendMessage(byte[] message, string from);
     }
 }
